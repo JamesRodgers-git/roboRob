@@ -1,0 +1,7 @@
+# CRSF serial connection (src/crsf_connection.py)
+pyserial>=3.5
+
+# Running tests
+pytest>=7.0
+
+smbus2>=0.4.1

@@ -1,0 +1,51 @@
+{
+    "$schema": "https://cdn.statically.io/gh/nguyenngoclongdev/cdn/main/schema/v11/terminal-keeper.json",
+    "theme": "tribe",
+    "active": "default",
+    "activateOnStartup": true,
+    "keepExistingTerminals": false,
+    "sessions": {
+        "default": [
+            {
+                "name": "Project macros",
+                "icon": "person",
+                "color": "terminal.ansiGreen",
+                "commands": [
+                    "rsync -az --delete ./ heiwashin@robowheels.local:~/robowheels/"
+               ]
+            },
+            [
+                {
+                    "name": "global_macros",
+                    "autoExecuteCommands": true,
+                    "commands": [
+                        "eval $(ssh-agent -s)",
+                        "ssh-add ~/.ssh/id_ed25519"
+                    ]
+                }
+            ],
+            [
+                {
+                    "name": "docker:nats",
+                    "commands": [
+                        ""
+                    ]
+                },
+                {
+                    "name": "docker:fleet",
+                    "commands": [
+                        ""
+                    ]
+                }
+            ]
+        ],
+        "saved-session": [
+            {
+                "name": "connect",
+                "commands": [
+                    ""
+                ]
+            }
+        ]
+    }
+}
