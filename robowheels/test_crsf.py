@@ -1,206 +1,149 @@
 #!/usr/bin/env python3
 """
-Test script for CRSF connection on Raspberry Pi 5
-Outputs connection status and received data
+CLI test for CRSF connection. Shows the same data as test_crsf_gui but in the terminal:
+connection status, 16 channels, link statistics (uplink/downlink), and frame counts.
+Uses CRSFConnection.start() so the connection runs its own reader thread.
 """
 
-import time
-import sys
 import os
+import sys
+import time
+
+import config
 from src.crsf_connection import CRSFConnection
 
 
-class CLIDisplay:
-    """Manages updating CLI display in place"""
-    
-    def __init__(self):
-        self.lines_written = 0
-        self.stats = {}
-        self.channels = [1500] * 16
-        self.frame_count = 0
-        self.channel_updates = 0
-        self.stats_updates = 0
-        self.start_time = time.time()
-        self.last_update_time = 0
-    
-    def clear_screen(self):
-        """Clear screen and move cursor to top"""
-        os.system('clear' if os.name != 'nt' else 'cls')
-        self.lines_written = 0
-    
-    def move_to_start(self):
-        """Move cursor back to start of display area"""
-        if self.lines_written > 0:
-            print(f"\033[{self.lines_written}A", end="")
-    
-    def update_display(self):
-        """Update the entire display in place"""
-        self.move_to_start()
-        
-        # Header (static)
-        print("=" * 70)
-        print("CRSF Connection Test - Press Ctrl+C to stop")
-        print("=" * 70)
-        print()
-        
-        # Status line
-        elapsed = time.time() - self.start_time
-        time_since_update = time.time() - self.last_update_time if self.last_update_time > 0 else 0
-        status = "🟢 CONNECTED" if time_since_update < 2.0 else "🟡 NO DATA"
-        print(f"Status: {status} | Runtime: {elapsed:6.1f}s | Last update: {time_since_update:5.2f}s ago")
-        print()
-        
-        # Channels (4 rows of 4 channels)
-        print("📡 Channels:")
-        for row in range(4):
-            ch_nums = [row * 4 + i + 1 for i in range(4)]
-            ch_values = [self.channels[i-1] for i in ch_nums]
-            print(f"  CH{ch_nums[0]:2d}: {ch_values[0]:4d}  CH{ch_nums[1]:2d}: {ch_values[1]:4d}  "
-                  f"CH{ch_nums[2]:2d}: {ch_values[2]:4d}  CH{ch_nums[3]:2d}: {ch_values[3]:4d}")
-        print()
-        
-        # Link Statistics
-        print("📊 Link Statistics:")
-        if self.stats:
-            uplink_rssi = self.stats.get('uplink_rssi_ant1', 0)
-            uplink_lq = self.stats.get('uplink_link_quality', 0)
-            uplink_snr = self.stats.get('uplink_snr', 0)
-            downlink_rssi = self.stats.get('downlink_rssi', 0)
-            downlink_lq = self.stats.get('downlink_link_quality', 0)
-            downlink_snr = self.stats.get('downlink_snr', 0)
-            
-            print(f"  Uplink:   RSSI: {uplink_rssi:3d} dBm  LQ: {uplink_lq:3d}%  SNR: {uplink_snr:3d} dB")
-            print(f"  Downlink: RSSI: {downlink_rssi:3d} dBm  LQ: {downlink_lq:3d}%  SNR: {downlink_snr:3d} dB")
-        else:
-            print("  No statistics available")
-        print()
-        
-        # Statistics
-        print("📈 Statistics:")
-        print(f"  Frames: {self.frame_count:6d}  |  Channel updates: {self.channel_updates:6d}  |  "
-              f"Stats updates: {self.stats_updates:6d}")
-        print()
-        
-        # Calculate total lines written
-        self.lines_written = 18  # Header + status + channels + stats + spacing
-        print()  # Extra line for spacing
+def clear_screen() -> None:
+    os.system("clear" if os.name != "nt" else "cls")
 
 
-def main():
-    """Main test function"""
-    # Default port for Raspberry Pi UART
-    port = '/dev/ttyAMA0'
+def move_cursor_up(lines: int) -> None:
+    if lines > 0:
+        print(f"\033[{lines}A", end="")
+
+
+def main() -> None:
+    port = config.CRSF_PORT
     if len(sys.argv) > 1:
         port = sys.argv[1]
-    
-    print(f"Attempting to connect to: {port} (baudrate: 420000)...")
-    
-    # Create and connect
-    crsf = CRSFConnection(port=port)
-    
-    if not crsf.connect():
-        print("❌ FAILED: Could not establish serial connection")
-        print()
+    baud = config.CRSF_BAUD_RATE
+    print(f"Connecting to {port} (baud {baud})...")
+
+    crsf = CRSFConnection(port=port, baudrate=baud)
+    try:
+        crsf.start()
+    except RuntimeError as e:
+        print(f"Failed to start: {e}")
         print("Troubleshooting:")
         print("  1. Check if the serial port exists: ls -l /dev/tty*")
-        print("  2. Ensure you have permissions: sudo usermod -a -G dialout $USER")
+        print("  2. Ensure permissions: sudo usermod -a -G dialout $USER")
         print("  3. Verify UART is enabled in raspi-config")
-        print("  4. Check if another process is using the port")
         sys.exit(1)
-    
-    # Initialize display
-    display = CLIDisplay()
-    display.clear_screen()
-    display.start_time = time.time()
-    
+
+    start_time = time.time()
+    display_lines = 0
+
     try:
         while True:
-            frame = crsf.read_frame()
-            
-            if frame:
-                display.frame_count += 1
-                frame_type = frame.get('type', 0)
-                
-                # Handle channel frames
-                if frame_type == CRSFConnection.FRAME_TYPE_CHANNELS:
-                    display.channel_updates += 1
-                    display.channels = frame.get('channels', display.channels)
-                    display.last_update_time = time.time()
-                
-                # Handle link statistics frames
-                elif frame_type == CRSFConnection.FRAME_TYPE_LINK_STATISTICS:
-                    display.stats_updates += 1
-                    display.stats = frame.get('link_statistics', {})
-                    display.last_update_time = time.time()
-            
-            # Update display every loop iteration (it will update in place)
-            display.update_display()
-            
-            # Small delay to prevent CPU spinning
-            time.sleep(0.05)  # ~20 updates per second
-            
+            channels, last_update, ch_updates, stats_updates, link_stats = crsf.get_snapshot()
+            age = time.time() - last_update if last_update > 0 else 999.0
+            elapsed = time.time() - start_time
+
+            move_cursor_up(display_lines)
+
+            lines = []
+            lines.append("=" * 70)
+            lines.append("CRSF Connection Test (CLI) - Press Ctrl+C to stop")
+            lines.append("=" * 70)
+            lines.append("")
+            # Connection status (like GUI)
+            status = "CONNECTED (Receiving)" if age < 2.0 else "CONNECTED (No Data)"
+            lines.append(f"Status: {status}  |  Runtime: {elapsed:6.1f}s  |  Last update: {age:5.2f}s ago")
+            lines.append("")
+            # Channels (4x4, like GUI)
+            lines.append("Channels (16):")
+            for row in range(4):
+                ch_nums = [row * 4 + i + 1 for i in range(4)]
+                ch_vals = [int(channels[i - 1]) for i in ch_nums]
+                lines.append(
+                    f"  CH{ch_nums[0]:2d}: {ch_vals[0]:4d}  CH{ch_nums[1]:2d}: {ch_vals[1]:4d}  "
+                    f"CH{ch_nums[2]:2d}: {ch_vals[2]:4d}  CH{ch_nums[3]:2d}: {ch_vals[3]:4d}"
+                )
+            lines.append("")
+            # Link statistics (like GUI: uplink / downlink)
+            lines.append("Link Statistics:")
+            if link_stats:
+                ul_rssi = link_stats.get("uplink_rssi_ant1", 0)
+                ul_lq = link_stats.get("uplink_link_quality", 0)
+                ul_snr = link_stats.get("uplink_snr", 0)
+                dl_rssi = link_stats.get("downlink_rssi", 0)
+                dl_lq = link_stats.get("downlink_link_quality", 0)
+                dl_snr = link_stats.get("downlink_snr", 0)
+                lines.append(f"  Uplink:   RSSI: {ul_rssi:3d} dBm   LQ: {ul_lq:3d}%   SNR: {ul_snr:3d} dB")
+                lines.append(f"  Downlink: RSSI: {dl_rssi:3d} dBm   LQ: {dl_lq:3d}%   SNR: {dl_snr:3d} dB")
+            else:
+                lines.append("  (none yet)")
+            lines.append("")
+            # Statistics (like GUI)
+            total_frames = ch_updates + stats_updates
+            lines.append("Statistics:")
+            lines.append(f"  Frames: {total_frames:6d}  |  Channel updates: {ch_updates:6d}  |  Stats updates: {stats_updates:6d}")
+            lines.append("")
+
+            text = "\n".join(lines)
+            print(text)
+            display_lines = len(lines)
+
+            time.sleep(0.05)
+
     except KeyboardInterrupt:
-        # Clear the updating display and show final results
-        print("\n" * 20)  # Clear the update area
+        move_cursor_up(display_lines)
+        print("\n" * (display_lines + 2))
+
+        crsf.stop()
+        elapsed = time.time() - start_time
+        channels, last_update, ch_updates, stats_updates, link_stats = crsf.get_snapshot()
+        total = ch_updates + stats_updates
+
         print("=" * 70)
         print("Test stopped by user")
         print("=" * 70)
         print()
-        print("Final Statistics:")
-        elapsed = time.time() - display.start_time
-        print(f"   Test duration: {elapsed:.1f} seconds")
-        print(f"   Total frames received: {display.frame_count}")
-        print(f"   Channel updates: {display.channel_updates}")
-        print(f"   Link stats updates: {display.stats_updates}")
+        print("Final statistics:")
+        print(f"  Duration:     {elapsed:.1f}s")
+        print(f"  Frames:       {total}")
+        print(f"  Ch. updates:  {ch_updates}")
+        print(f"  Stats updates:{stats_updates}")
         print()
-        
-        if crsf.is_connected():
-            print("Final channel values:")
-            for row in range(4):
-                ch_nums = [row * 4 + i + 1 for i in range(4)]
-                ch_values = [display.channels[i-1] for i in ch_nums]
-                print(f"  CH{ch_nums[0]:2d}: {ch_values[0]:4d}  CH{ch_nums[1]:2d}: {ch_values[1]:4d}  "
-                      f"CH{ch_nums[2]:2d}: {ch_values[2]:4d}  CH{ch_nums[3]:2d}: {ch_values[3]:4d}")
+        print("Final channel values:")
+        for row in range(4):
+            ch_nums = [row * 4 + i + 1 for i in range(4)]
+            ch_vals = [int(channels[i - 1]) for i in ch_nums]
+            print(
+                f"  CH{ch_nums[0]:2d}: {ch_vals[0]:4d}  CH{ch_nums[1]:2d}: {ch_vals[1]:4d}  "
+                f"CH{ch_nums[2]:2d}: {ch_vals[2]:4d}  CH{ch_nums[3]:2d}: {ch_vals[3]:4d}"
+            )
+        if link_stats:
             print()
-            
-            if display.stats:
-                print("Final link statistics:")
-                uplink_rssi = display.stats.get('uplink_rssi_ant1', 0)
-                uplink_lq = display.stats.get('uplink_link_quality', 0)
-                uplink_snr = display.stats.get('uplink_snr', 0)
-                downlink_rssi = display.stats.get('downlink_rssi', 0)
-                downlink_lq = display.stats.get('downlink_link_quality', 0)
-                downlink_snr = display.stats.get('downlink_snr', 0)
-                print(f"  Uplink:   RSSI: {uplink_rssi:3d} dBm  LQ: {uplink_lq:3d}%  SNR: {uplink_snr:3d} dB")
-                print(f"  Downlink: RSSI: {downlink_rssi:3d} dBm  LQ: {downlink_lq:3d}%  SNR: {downlink_snr:3d} dB")
-                print()
-        
-        crsf.disconnect()
-        print("✅ Connection closed")
+            print("Final link statistics:")
+            print(f"  Uplink:   RSSI: {link_stats.get('uplink_rssi_ant1', 0):3d} dBm   LQ: {link_stats.get('uplink_link_quality', 0):3d}%   SNR: {link_stats.get('uplink_snr', 0):3d} dB")
+            print(f"  Downlink: RSSI: {link_stats.get('downlink_rssi', 0):3d} dBm   LQ: {link_stats.get('downlink_link_quality', 0):3d}%   SNR: {link_stats.get('downlink_snr', 0):3d} dB")
         print()
-        
-        # Determine test result
-        if display.frame_count > 0:
-            print("✅ TEST PASSED: CRSF connection is working!")
-            print(f"   Successfully received {display.frame_count} frames")
+        print("Connection closed.")
+        print()
+        if total > 0:
+            print("TEST PASSED: CRSF connection is working.")
         else:
-            print("⚠️  TEST INCONCLUSIVE: No frames received")
-            print("   This could mean:")
-            print("   - Transmitter is not powered on")
-            print("   - Wrong serial port")
-            print("   - Wiring issue")
-            print("   - CRSF device not configured correctly")
-        
+            print("No frames received. Check transmitter, port, and wiring.")
         sys.exit(0)
-    
+
     except Exception as e:
-        print(f"\n\n❌ ERROR: {e}")
+        crsf.stop()
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()
-        crsf.disconnect()
         sys.exit(1)
 
 
 if __name__ == "__main__":
     main()
-

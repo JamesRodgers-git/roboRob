@@ -2,11 +2,14 @@ try:
     from gpiozero import PWMOutputDevice
 except ImportError:
     PWMOutputDevice = None
+    print("GPIOZero not found, using RPi.GPIO")
+
 
 try:
     import RPi.GPIO as GPIO
 except ImportError:
     GPIO = None
+    print("RPi.GPIO not found, using gpiozero")
 
 
 """

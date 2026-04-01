@@ -262,33 +262,11 @@ class DriveGUI:
         self.control_thread.start()
         self._update_display()
 
-    def _read_loop(self) -> None:
-        while self.running:
-            if not self.crsf.is_connected():
-                time.sleep(0.05)
-                continue
-
-            frame = self.crsf.read_latest_frame()
-            if frame:
-                with self.data_lock:
-                    self.frame_count += 1
-                    frame_type = frame.get("type", 0)
-                    if frame_type == CRSFConnection.FRAME_TYPE_CHANNELS:
-                        self.channels = frame.get("channels", self.channels)
-                        self.channel_updates += 1
-                        self.last_rx_time = time.time()
-                    elif frame_type == CRSFConnection.FRAME_TYPE_LINK_STATISTICS:
-                        self.link_stats = frame.get("link_statistics", self.link_stats)
-                        self.stats_updates += 1
-            else:
-                time.sleep(0.002)
-
     def _control_loop(self) -> None:
         loop_delay = 1.0 / max(1, config.CONTROL_LOOP_HZ)
         while self.running:
-            with self.data_lock:
-                channels = list(self.channels)
-                last_rx = self.last_rx_time
+            # One call for a consistent snapshot (no lock nesting, no mid-update reads)
+            channels, last_rx, ch_updates, stats_updates, _ = self.crsf.get_snapshot()
 
             if time.time() - last_rx > config.SIGNAL_STALE_TIMEOUT_S:
                 self.motor_left.set_speed_mph(0)
@@ -319,6 +297,11 @@ class DriveGUI:
             lat_accel = v_avg * yaw_rate
 
             with self.data_lock:
+                self.channels = channels
+                self.last_rx_time = last_rx
+                self.frame_count = ch_updates + stats_updates
+                self.channel_updates = ch_updates
+                self.stats_updates = stats_updates
                 self.left_output_mph = left_mph
                 self.right_output_mph = right_mph
                 self.left_brake = left_brake

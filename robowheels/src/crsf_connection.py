@@ -1,12 +1,14 @@
 """
 CRSF (Crossfire) connection module for Raspberry Pi 5
 Handles serial communication and CRSF protocol parsing
+Starts a reader thread that reads the latest frame and updates the channels and link statistics.
 """
 
 import serial
 import struct
 import time
 from typing import Optional, List, Dict, Tuple
+import threading
 
 
 class CRSFConnection:
@@ -33,6 +35,13 @@ class CRSFConnection:
         self.channels = [1500] * 16  # 16 channels, default to 1500 (center)
         self.link_statistics = {}
         self.last_update = time.time()
+        self.link_stats = {}
+        self.latest_frame = None
+        self.reader_thread = None
+        self.data_lock = threading.Lock()
+        self.running = False
+        self.channel_updates = 0
+        self.stats_updates = 0
         
     def connect(self) -> bool:
         """
@@ -64,6 +73,44 @@ class CRSFConnection:
         if self.serial_conn and self.serial_conn.is_open:
             self.serial_conn.close()
             self.serial_conn = None
+
+    def start(self) -> None:
+        if not self.connect():
+            raise RuntimeError("Failed to connect to CRSF receiver.")
+
+        if self.is_connected():
+            self.running = True
+            self.reader_thread = threading.Thread(target=self._read_loop, daemon=True)
+            self.reader_thread.start()
+        else:
+            raise RuntimeError("Need to connect to CRSF receiver before starting.")
+    
+    def stop(self) -> None:
+        self.running = False
+        if self.reader_thread:
+            self.reader_thread.join(timeout=1.0)
+        self.reader_thread = None
+        self.disconnect()
+
+    def _read_loop(self) -> None:
+        while self.running:
+            if not self.is_connected():
+                time.sleep(0.05)
+                continue
+
+            frame = self.read_latest_frame()
+            if frame:
+                with self.data_lock:
+                    frame_type = frame.get("type", 0)
+                    if frame_type == CRSFConnection.FRAME_TYPE_CHANNELS:
+                        self.channels = frame.get("channels", self.channels)
+                        self.channel_updates += 1
+                        self.last_update = time.time()
+                    elif frame_type == CRSFConnection.FRAME_TYPE_LINK_STATISTICS:
+                        self.link_stats = frame.get("link_statistics", self.link_stats)
+                        self.stats_updates += 1
+            else:
+                time.sleep(0.002)
     
     def _parse_channels(self, data: bytes) -> List[int]:
         """
@@ -213,12 +260,30 @@ class CRSFConnection:
         return latest
     
     def get_channels(self) -> List[int]:
-        """Get current channel values"""
-        return self.channels.copy()
+        """Get current channel values (copy). For a consistent multi-field snapshot, use get_snapshot()."""
+        with self.data_lock:
+            return list(self.channels)
+
+    def get_snapshot(self) -> Tuple[List[int], float, int, int, Dict]:
+        """
+        Return a consistent snapshot under one lock. Use this whenever you need
+        multiple fields from CRSF so they don't change mid-read.
+        Returns:
+            (channels_copy, last_update_timestamp, channel_updates, stats_updates, link_stats_copy)
+        """
+        with self.data_lock:
+            return (
+                list(self.channels),
+                self.last_update,
+                self.channel_updates,
+                self.stats_updates,
+                dict(self.link_stats),
+            )
     
     def get_link_statistics(self) -> Dict:
-        """Get current link statistics"""
-        return self.link_statistics.copy()
+        """Get current link statistics (from reader thread state). For a consistent snapshot with channels, use get_snapshot()."""
+        with self.data_lock:
+            return dict(self.link_stats)
     
     def is_connected(self) -> bool:
         """Check if connection is active"""
@@ -236,3 +301,4 @@ class CRSFConnection:
         frame = struct.pack('BB', frame_type, len(payload)) + payload
         self.serial_conn.write(frame)
         return True
+    

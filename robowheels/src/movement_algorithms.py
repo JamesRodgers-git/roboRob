@@ -107,7 +107,7 @@ class LateralLimitedMovementAlgorithm(MovementAlgorithm):
     current_right_brake: int,
     ) -> Tuple[int, int, int, int]:
 
-        # todo remove this and adjust brakes once reverse is implemented
+        # Forward only: clamp to 1500-2012 so stick must be above 1530 (center+deadband) for motion
         left_channel_input = max(1500, min(2012, left_channel_input))
         right_channel_input = max(1500, min(2012, right_channel_input))
 
