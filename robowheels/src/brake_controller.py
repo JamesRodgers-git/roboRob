@@ -10,6 +10,7 @@ try:
 except ImportError:
     GPIO = None
     print("RPi.GPIO not found, using gpiozero")
+import time
 
 
 """
@@ -18,15 +19,27 @@ PWM output for the left and right brake independently.
 Brake values are 0-100: 0 = full brake, 100 = release (spring brake).
 """
 class BrakeController:
-    def __init__(self, left_brake_pin: int, right_brake_pin: int, pwm_hz: int = 1000):
+    def __init__(
+        self,
+        left_brake_pin: int,
+        right_brake_pin: int,
+        pwm_hz: int = 1000,
+        brake_apply_rate_per_s: float = 0.0,
+        brake_release_rate_per_s: float = 0.0,
+        max_step_dt_s: float = 0.1,
+    ):
         self.left_brake_pin = left_brake_pin
         self.right_brake_pin = right_brake_pin
         self.pwm_hz = pwm_hz
+        self.brake_apply_rate_per_s = max(0.0, float(brake_apply_rate_per_s))
+        self.brake_release_rate_per_s = max(0.0, float(brake_release_rate_per_s))
+        self.max_step_dt_s = max(0.01, float(max_step_dt_s))
         self.left_pwm = None
         self.right_pwm = None
         self._gpio_backend = None  # "gpiozero" or "rpi"
         self._left_value = 0.0
         self._right_value = 0.0
+        self._last_update_time = time.monotonic()
 
         # Prefer gpiozero (works on Pi 5; RPi.GPIO raises RuntimeError on Pi 5)
         if PWMOutputDevice is not None:
@@ -78,9 +91,30 @@ class BrakeController:
         else:
             pwm.ChangeDutyCycle(v)
 
+    def _ramp_brake(self, current: float, target: float, dt: float) -> float:
+        # Lower brake value means more braking (0=full brake, 100=release).
+        # "Apply" is moving downward toward 0.
+        if target < current:
+            rate = self.brake_apply_rate_per_s
+            if rate <= 0:
+                return target
+            return max(target, current - (rate * dt))
+        if target > current:
+            rate = self.brake_release_rate_per_s
+            if rate <= 0:
+                return target
+            return min(target, current + (rate * dt))
+        return target
+
     def set_brake(self, left_value: float, right_value: float):
-        self._left_value = max(0.0, min(100.0, float(left_value)))
-        self._right_value = max(0.0, min(100.0, float(right_value)))
+        now = time.monotonic()
+        dt = max(0.0, min(self.max_step_dt_s, now - self._last_update_time))
+        self._last_update_time = now
+
+        left_target = max(0.0, min(100.0, float(left_value)))
+        right_target = max(0.0, min(100.0, float(right_value)))
+        self._left_value = self._ramp_brake(self._left_value, left_target, dt)
+        self._right_value = self._ramp_brake(self._right_value, right_target, dt)
         self._apply(self.left_pwm, self._left_value)
         self._apply(self.right_pwm, self._right_value)
 

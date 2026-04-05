@@ -1,11 +1,16 @@
 BRAKE_LEFT_PIN = 17
 BRAKE_RIGHT_PIN = 27
+BRAKE_APPLY_RATE_PER_S = 80.0
+BRAKE_RELEASE_RATE_PER_S = 0.0
 
 
 CRSF_PORT = '/dev/serial0'
 CRSF_BAUD_RATE = 420000
-CRSF_LEFT_CHANNEL = 1
-CRSF_RIGHT_CHANNEL = 2
+CRSF_THROTTLE_CHANNEL = 1
+CRSF_TURN_CHANNEL = 2
+# Backward-compatible aliases.
+CRSF_LEFT_CHANNEL = CRSF_THROTTLE_CHANNEL
+CRSF_RIGHT_CHANNEL = CRSF_TURN_CHANNEL
 CRSF_CHANNEL_DEADBAND = 30
 CRSF_CHANNEL_MIN = 988
 CRSF_CHANNEL_MAX = 2012
@@ -23,7 +28,23 @@ MAX_ACCELERATION = 4 # maximum acceleration limit in miles per hour per second
 MAX_LATERAL_ACCELERATION = 2 # maximum lateral acceleration limit in miles per hour per second
 MAX_TURN_RATE = 100 # maximum turn rate limit in degrees per second
 WHEEL_BASE_METERS = 0.6 # distance between wheels, update to match your chair
+TURN_GAIN_AT_STOP = 1.0
+TURN_GAIN_AT_MAX_SPEED = 0.3
+PIVOT_TURN_SPEED_MPH = 1.6
+TURN_INPUT_DEADBAND = 0.02
+ALLOW_REVERSE = False
+TURN_INPUT_INVERT = False
+THROTTLE_INPUT_INVERT = False
+MANUAL_OVERRIDE_THRESHOLD = 0.05
 CONTROL_LOOP_HZ = 50
+
+# On Pi Zero 2 W gadget side, use "auto" to wait for /dev/ttyGS* creation.
+USB_COMMAND_PORT = 'auto'
+USB_COMMAND_BAUD_RATE = 115200
+USB_COMMAND_TIMEOUT_S = 0.35
+USB_STATUS_RATE_HZ = 20
+AI_FAILSAFE_TIMEOUT_S = 0.75
+DRIVE_LOG_LEVEL = "INFO"
 
 # Set to True to print ch1, ch2, left_mph, right_mph every 2s (for debugging "motors not moving")
 DEBUG_DRIVE = False

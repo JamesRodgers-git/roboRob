@@ -20,6 +20,25 @@ from src.movement_algorithms import LateralLimitedMovementAlgorithm
 _MPH_TO_MPS = 0.44704
 
 
+def normalize_crsf_channel(
+    value: int,
+    input_min: int,
+    input_max: int,
+    input_center: int,
+    deadband: int,
+    invert: bool = False,
+) -> float:
+    if value >= input_center + deadband:
+        norm = (value - (input_center + deadband)) / max(1.0, (input_max - input_center - deadband))
+        out = max(0.0, min(1.0, norm))
+    elif value <= input_center - deadband:
+        norm = (value - (input_center - deadband)) / max(1.0, (input_center - deadband - input_min))
+        out = max(-1.0, min(0.0, norm))
+    else:
+        out = 0.0
+    return -out if invert else out
+
+
 class DriveGUI:
     def __init__(self, root: tk.Tk, port: str):
         self.root = root
@@ -44,8 +63,7 @@ class DriveGUI:
         self.lat_accel = 0.0
 
         self.crsf = CRSFConnection(port=self.port, baudrate=config.CRSF_BAUD_RATE)
-        if not self.crsf.connect():
-            raise RuntimeError("Failed to connect to CRSF receiver.")
+        self.crsf.start()
 
         self.motor_left = MotorController(
             address=config.MOTOR_CONTROLLER1_ADDRESS,
@@ -61,7 +79,12 @@ class DriveGUI:
             reset_speed=config.MOTOR_CONTROLLER_RESET_SPEED,
             max_speed_mph=config.MAX_SPEED,
         )
-        self.brakes = BrakeController(config.BRAKE_LEFT_PIN, config.BRAKE_RIGHT_PIN)
+        self.brakes = BrakeController(
+            config.BRAKE_LEFT_PIN,
+            config.BRAKE_RIGHT_PIN,
+            brake_apply_rate_per_s=config.BRAKE_APPLY_RATE_PER_S,
+            brake_release_rate_per_s=config.BRAKE_RELEASE_RATE_PER_S,
+        )
 
         self.algorithm = LateralLimitedMovementAlgorithm(
             max_speed_mph=config.MAX_SPEED,
@@ -69,10 +92,11 @@ class DriveGUI:
             max_turn_rate=config.MAX_TURN_RATE,
             max_lateral_acceleration=config.MAX_LATERAL_ACCELERATION,
             wheel_base_meters=config.WHEEL_BASE_METERS,
-            input_min=config.CRSF_CHANNEL_MIN,
-            input_max=config.CRSF_CHANNEL_MAX,
-            input_center=1500,
-            input_deadband=config.CRSF_CHANNEL_DEADBAND,
+            turn_gain_at_stop=config.TURN_GAIN_AT_STOP,
+            turn_gain_at_max_speed=config.TURN_GAIN_AT_MAX_SPEED,
+            pivot_turn_speed_mph=config.PIVOT_TURN_SPEED_MPH,
+            turn_deadband=config.TURN_INPUT_DEADBAND,
+            allow_reverse=config.ALLOW_REVERSE,
         )
 
         self._setup_ui()
@@ -256,9 +280,7 @@ class DriveGUI:
     def start(self) -> None:
         self.running = True
         self.start_time = time.time()
-        self.reader_thread = threading.Thread(target=self._read_loop, daemon=True)
         self.control_thread = threading.Thread(target=self._control_loop, daemon=True)
-        self.reader_thread.start()
         self.control_thread.start()
         self._update_display()
 
@@ -271,16 +293,32 @@ class DriveGUI:
             if time.time() - last_rx > config.SIGNAL_STALE_TIMEOUT_S:
                 self.motor_left.set_speed_mph(0)
                 self.motor_right.set_speed_mph(0)
-                self.brakes.set_brake(100, 100)
+                self.brakes.set_brake(0, 0)
                 time.sleep(loop_delay)
                 continue
 
-            left_input = channels[config.CRSF_LEFT_CHANNEL - 1]
-            right_input = channels[config.CRSF_RIGHT_CHANNEL - 1]
+            throttle_input = int(channels[config.CRSF_THROTTLE_CHANNEL - 1])
+            turn_input = int(channels[config.CRSF_TURN_CHANNEL - 1])
+            throttle_command = normalize_crsf_channel(
+                throttle_input,
+                config.CRSF_CHANNEL_MIN,
+                config.CRSF_CHANNEL_MAX,
+                1500,
+                config.CRSF_CHANNEL_DEADBAND,
+                invert=config.THROTTLE_INPUT_INVERT,
+            )
+            turn_command = normalize_crsf_channel(
+                turn_input,
+                config.CRSF_CHANNEL_MIN,
+                config.CRSF_CHANNEL_MAX,
+                1500,
+                config.CRSF_CHANNEL_DEADBAND,
+                invert=config.TURN_INPUT_INVERT,
+            )
 
             left_mph, right_mph, left_brake, right_brake = self.algorithm.compute(
-                left_input,
-                right_input,
+                throttle_command,
+                turn_command,
                 self.motor_left.get_speed_mph(),
                 self.motor_right.get_speed_mph(),
                 *self.brakes.get_brake(),
@@ -367,7 +405,7 @@ class DriveGUI:
         self.running = False
         try:
             self.brakes.cleanup()
-            self.crsf.disconnect()
+            self.crsf.stop()
         finally:
             self.root.quit()
             self.root.destroy()

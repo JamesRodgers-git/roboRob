@@ -8,6 +8,25 @@ from src.crsf_connection import CRSFConnection
 from src.movement_algorithms import LateralLimitedMovementAlgorithm
 
 
+def normalize_crsf_channel(
+    value: int,
+    input_min: int,
+    input_max: int,
+    input_center: int,
+    deadband: int,
+    invert: bool = False,
+) -> float:
+    if value >= input_center + deadband:
+        norm = (value - (input_center + deadband)) / max(1.0, (input_max - input_center - deadband))
+        out = max(0.0, min(1.0, norm))
+    elif value <= input_center - deadband:
+        norm = (value - (input_center - deadband)) / max(1.0, (input_center - deadband - input_min))
+        out = max(-1.0, min(0.0, norm))
+    else:
+        out = 0.0
+    return -out if invert else out
+
+
 class NullMotorController:
     def __init__(self, max_speed_mph: float):
         self._max_speed_mph = max_speed_mph
@@ -70,7 +89,12 @@ def main() -> None:
             reset_speed=config.MOTOR_CONTROLLER_RESET_SPEED,
             max_speed_mph=config.MAX_SPEED,
         )
-        brakes = BrakeController(config.BRAKE_LEFT_PIN, config.BRAKE_RIGHT_PIN)
+        brakes = BrakeController(
+            config.BRAKE_LEFT_PIN,
+            config.BRAKE_RIGHT_PIN,
+            brake_apply_rate_per_s=config.BRAKE_APPLY_RATE_PER_S,
+            brake_release_rate_per_s=config.BRAKE_RELEASE_RATE_PER_S,
+        )
     else:
         motor_left = NullMotorController(config.MAX_SPEED)
         motor_right = NullMotorController(config.MAX_SPEED)
@@ -82,10 +106,11 @@ def main() -> None:
         max_turn_rate=config.MAX_TURN_RATE,
         max_lateral_acceleration=config.MAX_LATERAL_ACCELERATION,
         wheel_base_meters=config.WHEEL_BASE_METERS,
-        input_min=config.CRSF_CHANNEL_MIN,
-        input_max=config.CRSF_CHANNEL_MAX,
-        input_center=1500,
-        input_deadband=config.CRSF_CHANNEL_DEADBAND,
+        turn_gain_at_stop=config.TURN_GAIN_AT_STOP,
+        turn_gain_at_max_speed=config.TURN_GAIN_AT_MAX_SPEED,
+        pivot_turn_speed_mph=config.PIVOT_TURN_SPEED_MPH,
+        turn_deadband=config.TURN_INPUT_DEADBAND,
+        allow_reverse=config.ALLOW_REVERSE,
     )
 
     root = tk.Tk()
@@ -107,9 +132,9 @@ def main() -> None:
     left_input_var = tk.StringVar(value="1500")
     right_input_var = tk.StringVar(value="1500")
     tk.Label(root, text="Inputs", font=("Helvetica", 12, "bold")).grid(row=2, column=2, sticky="w", padx=10)
-    tk.Label(root, text="Left:").grid(row=3, column=2, sticky="e", padx=10)
+    tk.Label(root, text="Throttle:").grid(row=3, column=2, sticky="e", padx=10)
     tk.Label(root, textvariable=left_input_var, width=6).grid(row=3, column=3, sticky="w")
-    tk.Label(root, text="Right:").grid(row=4, column=2, sticky="e", padx=10)
+    tk.Label(root, text="Turn:").grid(row=4, column=2, sticky="e", padx=10)
     tk.Label(root, textvariable=right_input_var, width=6).grid(row=4, column=3, sticky="w")
 
     motor_left_var = tk.StringVar(value="0.00 mph (0.0%)")
@@ -150,14 +175,30 @@ def main() -> None:
         for idx, value in enumerate(last_channels):
             channel_vars[idx].set(f"{int(value)}")
 
-        left_input = last_channels[config.CRSF_LEFT_CHANNEL - 1]
-        right_input = last_channels[config.CRSF_RIGHT_CHANNEL - 1]
-        left_input_var.set(f"{int(left_input)}")
-        right_input_var.set(f"{int(right_input)}")
+        throttle_input = int(last_channels[config.CRSF_THROTTLE_CHANNEL - 1])
+        turn_input = int(last_channels[config.CRSF_TURN_CHANNEL - 1])
+        throttle_command = normalize_crsf_channel(
+            throttle_input,
+            config.CRSF_CHANNEL_MIN,
+            config.CRSF_CHANNEL_MAX,
+            1500,
+            config.CRSF_CHANNEL_DEADBAND,
+            invert=config.THROTTLE_INPUT_INVERT,
+        )
+        turn_command = normalize_crsf_channel(
+            turn_input,
+            config.CRSF_CHANNEL_MIN,
+            config.CRSF_CHANNEL_MAX,
+            1500,
+            config.CRSF_CHANNEL_DEADBAND,
+            invert=config.TURN_INPUT_INVERT,
+        )
+        left_input_var.set(f"{throttle_input}")
+        right_input_var.set(f"{turn_input}")
 
         left_mph, right_mph, left_brake, right_brake = algorithm.compute(
-            left_input,
-            right_input,
+            throttle_command,
+            turn_command,
             motor_left.get_speed_mph(),
             motor_right.get_speed_mph(),
             *brakes.get_brake(),
