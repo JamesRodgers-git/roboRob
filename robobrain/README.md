@@ -1,4 +1,4 @@
-# RoboBrain (Pi 5 + AI HAT+)
+# RoboBrain (Pi 5 + Hailo-10H AI HAT+)
 
 `robobrain` is the high-level inference process. It captures dual-camera frames,
 runs a **perception pipeline** (semantic segmentation + optional stereo depth),
@@ -23,7 +23,12 @@ The movement client auto-detects the Zero 2 W gadget serial device on the Pi 5
   the map (`steer_from_map` in `src/perception/pipeline.py`). If
   `REQUIRE_DEPTH_FOR_MOTION = True`, commands are zero unless depth fusion ran.
 
-## Hailo on Raspberry Pi
+## Hailo on Raspberry Pi (Hailo-10H)
+
+This project assumes a **Hailo-10H** (e.g. Raspberry Pi AI Kit / AI HAT+ on Pi 5): use
+**`hailo10h`** compiled `.hef` files from the [Hailo Model Zoo](https://github.com/hailo-ai/hailo_model_zoo)
+public builds (`HAILO_MODEL_ZOO_DOCS_FAMILY = "HAILO10H"` in `config.py`). For **Hailo-8 / 8L**,
+change that family (e.g. `HAILO8L`) and re-download matching HEFs via `tools/download_hailo_hefs.py`.
 
 Install the OS packages (see [Hailo Pi docs](https://community.hailo.ai/)); e.g.
 `sudo apt install hailo-all`. The Python module `hailo_platform` is usually
@@ -33,8 +38,13 @@ provided with that stack (often under system `dist-packages`). A venv may need
 Set in `config.py`:
 
 - `USE_HAILO = True`
-- `HAILO_STDC1_HEF` / `HAILO_STEREONET_HEF` to your `.hef` paths (from the
-  [Hailo Model Zoo](https://github.com/hailo-ai/hailo_model_zoo)).
+- `HAILO_DEVICE_ID`: which device when multiple are present (order from Hailo’s device scan; default `0`).
+- Inference uses the **InferModel** path (`VDevice` + `create_infer_model`), which matches current Hailo
+  examples and avoids legacy `configure(HEF)` failures on Hailo-10H (`HAILO_NOT_IMPLEMENTED`). With both STDC1
+  and StereoNet enabled, RoboBrain opens **one** shared `VDevice` for both models (a second `VDevice` would raise
+  `HAILO_DEVICE_IN_USE`).
+- `HAILO_STDC1_HEF` / `HAILO_STEREONET_HEF` to your `.hef` paths, or run
+  `python tools/download_hailo_hefs.py` (defaults match `config.py`).
 
 Input sizes default to model-zoo defaults (`STDC1_*`, `STEREONET_*`).
 
@@ -113,6 +123,26 @@ The Pi Zero 2 W responds with status lines:
 - `tools/stereo_calibrate.py` — chessboard stereo calibration
 
 ## Run
+
+### Dual CSI on Pi 5 (two official camera connectors)
+
+Those connectors are **MIPI CSI** (camera ribbon). With **libcamera / PISP**, `/dev/video*` nodes may exist and even report formats, but **direct V4L2 streaming often fails** (`VIDIOC_STREAMON: Invalid argument`) until libcamera builds the pipeline—so **OpenCV `VideoCapture("/dev/video0")` can open yet never return frames**.
+
+**Use `picamera2` for CSI stereo** (default `CAMERA_BACKEND = "auto"` selects it when `python3-picamera2` is installed). Set **`CAMERA_PICAMERA_LEFT`** / **`CAMERA_PICAMERA_RIGHT`** to **libcamera indices** (same order as):
+
+```bash
+rpicam-hello --list-cameras
+```
+
+(typically `0` and `1` for the two IMX sensors). Swap those integers if left/right are reversed.
+
+`v4l2-ctl --list-devices` still helps sanity-check two **`rp1-cfe`** blocks (one block per CSI connector). The `/dev/video0` + `/dev/video8` pairing is **not** what `picamera2` uses for device identity—indices are canonical.
+
+### OpenCV / USB webcams
+
+Set **`CAMERA_BACKEND = "opencv"`** in `config.py`. Then non-empty **`CAMERA_LEFT_PATH`** / **`CAMERA_RIGHT_PATH`** (or numeric **`CAMERA_*_INDEX`**) are passed to OpenCV; `DualCameraRig` tries the **V4L2** backend first.
+
+Logging: `LOG_LEVEL` / `BRAIN_STATUS_INTERVAL_S` in `config.py`, or override level with env **`ROBOBRAIN_LOG_LEVEL=DEBUG`**.
 
 ```bash
 pip3 install -r requirements.txt

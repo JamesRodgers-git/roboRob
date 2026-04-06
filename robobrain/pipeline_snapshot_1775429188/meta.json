@@ -1,0 +1,35 @@
+{
+  "timestamp": 1775429189.7276285,
+  "frame_size_hw": [
+    480,
+    640
+  ],
+  "rectified": false,
+  "camera_left_source": "picamera2:0",
+  "camera_right_source": "picamera2:1",
+  "capture_kind": "picamera2 (libcamera)",
+  "segmentation": {
+    "model_name": "stdc1",
+    "source_size_hw": [
+      480,
+      640
+    ]
+  },
+  "stereo": {
+    "model_name": "stereonet",
+    "kind": "disparity",
+    "source_size_hw": [
+      480,
+      640
+    ]
+  },
+  "traversability": {
+    "mean_score_roi": 0.5355496406555176,
+    "used_depth": true,
+    "stride": 4,
+    "score_map_hw": [
+      120,
+      160
+    ]
+  }
+}

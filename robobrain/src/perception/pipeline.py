@@ -9,6 +9,8 @@ import config as robobrain_config
 from src.camera_rig import FramePair
 from src.perception.calibration import StereoRectifier
 from src.perception.fusion.traversability import TraversabilityFusion, load_cityscapes_weights
+from src.perception.hailo_model_zoo_fetch import ensure_hailo_hefs_from_config
+from src.perception.hailo_runner import HailoSharedVDevice
 from src.perception.heads.base import PerceptionHead
 from src.perception.heads.segmentation_stdc1 import SegmentationStdc1Head
 from src.perception.heads.stereo_stereonet import StereoStereonetHead
@@ -47,10 +49,12 @@ class PerceptionPipeline:
         heads: List[PerceptionHead],
         fusion: TraversabilityFusion,
         rectifier: Optional[StereoRectifier] = None,
+        hailo_shared: Optional[HailoSharedVDevice] = None,
     ):
         self.heads = heads
         self.fusion = fusion
         self.rectifier = rectifier
+        self._hailo_shared = hailo_shared
 
     @classmethod
     def from_config(cls, cfg: Any = None) -> "PerceptionPipeline":
@@ -75,8 +79,19 @@ class PerceptionPipeline:
         )
 
         use_hailo = bool(getattr(cfg, "USE_HAILO", False))
-        seg_hef = getattr(cfg, "HAILO_STDC1_HEF", "") or ""
-        stereo_hef = getattr(cfg, "HAILO_STEREONET_HEF", "") or ""
+        seg_hef, stereo_hef = ensure_hailo_hefs_from_config(cfg)
+        if not seg_hef:
+            seg_hef = ""
+        if not stereo_hef:
+            stereo_hef = ""
+
+        stream_if = getattr(cfg, "HAILO_STREAM_INTERFACE", "integrated") or "integrated"
+        dev_idx = int(getattr(cfg, "HAILO_DEVICE_ID", 0))
+
+        n_hailo_hefs = (1 if use_hailo and seg_hef else 0) + (1 if use_hailo and stereo_hef else 0)
+        hailo_shared: Optional[HailoSharedVDevice] = None
+        if n_hailo_hefs > 1:
+            hailo_shared = HailoSharedVDevice(device_id_index=dev_idx)
 
         heads: List[PerceptionHead] = []
         if use_hailo and seg_hef:
@@ -85,6 +100,9 @@ class PerceptionPipeline:
                     seg_hef,
                     getattr(cfg, "STDC1_INPUT_HEIGHT", 1024),
                     getattr(cfg, "STDC1_INPUT_WIDTH", 1920),
+                    stream_interface=stream_if,
+                    device_id_index=dev_idx,
+                    hailo_shared=hailo_shared,
                 )
             )
         else:
@@ -96,12 +114,15 @@ class PerceptionPipeline:
                     stereo_hef,
                     getattr(cfg, "STEREONET_INPUT_HEIGHT", 368),
                     getattr(cfg, "STEREONET_INPUT_WIDTH", 1232),
+                    stream_interface=stream_if,
+                    device_id_index=dev_idx,
+                    hailo_shared=hailo_shared,
                 )
             )
         else:
             heads.append(StubStereoHead())
 
-        pipe = cls(heads=heads, fusion=fusion, rectifier=rectifier)
+        pipe = cls(heads=heads, fusion=fusion, rectifier=rectifier, hailo_shared=hailo_shared)
         return pipe
 
     def setup(self) -> None:
@@ -111,6 +132,9 @@ class PerceptionPipeline:
     def teardown(self) -> None:
         for h in reversed(self.heads):
             h.teardown()
+        if self._hailo_shared is not None:
+            self._hailo_shared.close()
+            self._hailo_shared = None
 
     def _rectify_pair(self, left, right):
         if self.rectifier and self.rectifier.is_loaded:

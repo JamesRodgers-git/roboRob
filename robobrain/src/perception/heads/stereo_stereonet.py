@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
 
 from src.camera_rig import FramePair
-from src.perception.hailo_runner import HailoSyncInferencer
+from src.perception.hailo_runner import HailoSharedVDevice, HailoSyncInferencer
 from src.perception.heads.base import PerceptionHead
 from src.perception.types import DepthOutput
 
@@ -26,10 +26,21 @@ def _postprocess_disparity(tensor: np.ndarray) -> np.ndarray:
 class StereoStereonetHead(PerceptionHead):
     name = "stereo"
 
-    def __init__(self, hef_path: str, input_height: int, input_width: int):
+    def __init__(
+        self,
+        hef_path: str,
+        input_height: int,
+        input_width: int,
+        stream_interface: str = "integrated",
+        device_id_index: int = 0,
+        hailo_shared: Optional[HailoSharedVDevice] = None,
+    ):
         self.hef_path = hef_path
         self.input_height = input_height
         self.input_width = input_width
+        self._stream_interface = stream_interface
+        self._device_id_index = device_id_index
+        self._hailo_shared = hailo_shared
         self._infer: HailoSyncInferencer | None = None
 
     def required_inputs(self) -> Set[str]:
@@ -38,7 +49,13 @@ class StereoStereonetHead(PerceptionHead):
     def setup(self) -> None:
         if not self.hef_path or not os.path.isfile(self.hef_path):
             raise FileNotFoundError(f"Stereonet HEF not found: {self.hef_path}")
-        self._infer = HailoSyncInferencer(self.hef_path, use_pcie=True)
+        vd = self._hailo_shared.ensure_open() if self._hailo_shared else None
+        self._infer = HailoSyncInferencer(
+            self.hef_path,
+            stream_interface=self._stream_interface,
+            device_id_index=self._device_id_index,
+            vdevice=vd,
+        )
         self._infer.open()
 
     def teardown(self) -> None:
