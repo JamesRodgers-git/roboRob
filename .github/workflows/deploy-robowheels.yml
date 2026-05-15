@@ -54,9 +54,17 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "${HOME}/.ssh/robowheels_deploy"
           chmod 600 "${HOME}/.ssh/robowheels_deploy"
           ssh-keyscan -H "$SSH_HOST" >> "${HOME}/.ssh/known_hosts" 2>/dev/null || true
-          echo "HOME=${HOME}" >> "$GITHUB_ENV"
-          echo "SSH_AUTH_KEY=${HOME}/.ssh/robowheels_deploy" >> "$GITHUB_ENV"
-          command -v ssh rsync
+          if command -v cygpath >/dev/null 2>&1; then
+            KEY_FILE=$(cygpath -u "${HOME}/.ssh/robowheels_deploy")
+            KNOWN_HOSTS=$(cygpath -u "${HOME}/.ssh/known_hosts")
+          else
+            KEY_FILE=$(echo "${HOME}/.ssh/robowheels_deploy" | sed 's|\\|/|g')
+            KNOWN_HOSTS=$(echo "${HOME}/.ssh/known_hosts" | sed 's|\\|/|g')
+          fi
+          echo "SSH_AUTH_KEY=${KEY_FILE}" >> "$GITHUB_ENV"
+          echo "SSH_KNOWN_HOSTS=${KNOWN_HOSTS}" >> "$GITHUB_ENV"
+          command -v ssh
+          command -v rsync
 
       - name: Rsync robowheels to Pi
         env:
@@ -66,9 +74,8 @@ jobs:
           set -euo pipefail
           export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
           DEST="${SSH_USER}@${SSH_HOST}:~/robowheels/"
-          RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
-          export RSYNC_RSH
-          rsync -az --delete \
+          export RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS}"
+          rsync -avz --delete \
             --exclude '.venv' \
             --exclude '__pycache__' \
             --exclude '.pytest_cache' \
@@ -84,6 +91,6 @@ jobs:
           export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
           ssh -i "${SSH_AUTH_KEY}" \
             -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
+            -o UserKnownHostsFile="${SSH_KNOWN_HOSTS}" \
             "${SSH_USER}@${SSH_HOST}" \
             "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels bash \$HOME/robowheels/deploy/bootstrap-remote.sh"
