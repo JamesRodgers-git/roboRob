@@ -71,6 +71,7 @@ class Drive:
         self.wheel_base_meters = config.WHEEL_BASE_METERS
         self.turn_gain_at_stop = config.TURN_GAIN_AT_STOP
         self.turn_gain_at_max_speed = config.TURN_GAIN_AT_MAX_SPEED
+        self.turn_throttle_derate_at_full_turn = config.TURN_THROTTLE_DERATE_AT_FULL_TURN
         self.pivot_turn_speed_mph = config.PIVOT_TURN_SPEED_MPH
         self.turn_input_deadband = config.TURN_INPUT_DEADBAND
         self.allow_reverse = config.ALLOW_REVERSE
@@ -121,6 +122,7 @@ class Drive:
             wheel_base_meters=self.wheel_base_meters,
             turn_gain_at_stop=self.turn_gain_at_stop,
             turn_gain_at_max_speed=self.turn_gain_at_max_speed,
+            turn_throttle_derate_at_full_turn=self.turn_throttle_derate_at_full_turn,
             pivot_turn_speed_mph=self.pivot_turn_speed_mph,
             turn_deadband=self.turn_input_deadband,
             allow_reverse=self.allow_reverse,

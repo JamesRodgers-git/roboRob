@@ -108,6 +108,7 @@ def main() -> None:
         wheel_base_meters=config.WHEEL_BASE_METERS,
         turn_gain_at_stop=config.TURN_GAIN_AT_STOP,
         turn_gain_at_max_speed=config.TURN_GAIN_AT_MAX_SPEED,
+        turn_throttle_derate_at_full_turn=config.TURN_THROTTLE_DERATE_AT_FULL_TURN,
         pivot_turn_speed_mph=config.PIVOT_TURN_SPEED_MPH,
         turn_deadband=config.TURN_INPUT_DEADBAND,
         allow_reverse=config.ALLOW_REVERSE,

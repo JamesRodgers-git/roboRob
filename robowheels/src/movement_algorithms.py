@@ -67,6 +67,7 @@ class LateralLimitedMovementAlgorithm(MovementAlgorithm):
         pivot_turn_speed_mph: float = 1.6,
         turn_deadband: float = 0.02,
         allow_reverse: bool = False,
+        turn_throttle_derate_at_full_turn: float = 0.2,
     ):
         super().__init__(max_speed_mph, max_acceleration, max_turn_rate, max_lateral_acceleration)
         self.wheel_base_meters = max(0.01, wheel_base_meters)
@@ -76,6 +77,11 @@ class LateralLimitedMovementAlgorithm(MovementAlgorithm):
         self.pivot_turn_speed_mph = max(0.0, float(pivot_turn_speed_mph))
         self.turn_deadband = max(0.0, float(turn_deadband))
         self.allow_reverse = bool(allow_reverse)
+        self.turn_throttle_derate_at_full_turn = self._clamp(
+            float(turn_throttle_derate_at_full_turn),
+            0.0,
+            0.95,
+        )
         self._last_update_time = time.monotonic()
 
     def _clamp(self, value: float, min_value: float, max_value: float) -> float:
@@ -96,7 +102,6 @@ class LateralLimitedMovementAlgorithm(MovementAlgorithm):
         return self.turn_gain_at_stop + ((self.turn_gain_at_max_speed - self.turn_gain_at_stop) * t)
 
     def _target_wheel_speeds(self, throttle: float, turn: float) -> Tuple[float, float]:
-        base_speed = throttle * self.max_speed_mph
         if abs(throttle) <= self.turn_deadband and abs(turn) > self.turn_deadband:
             # When starting from stationary, prioritize maximum turning sharpness.
             pivot = self._clamp(abs(turn) * self.pivot_turn_speed_mph, 0.0, self.max_speed_mph)
@@ -104,6 +109,8 @@ class LateralLimitedMovementAlgorithm(MovementAlgorithm):
                 return pivot, 0.0
             return 0.0, pivot
 
+        derate = self._clamp(abs(turn) * self.turn_throttle_derate_at_full_turn, 0.0, 0.95)
+        base_speed = throttle * self.max_speed_mph * (1.0 - derate)
         effective_turn = turn * self._turn_gain_for_speed(base_speed)
         turn_delta = effective_turn * abs(base_speed)
         left_target = base_speed + turn_delta

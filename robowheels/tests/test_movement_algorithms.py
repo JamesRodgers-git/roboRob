@@ -10,6 +10,7 @@ def _make_algorithm() -> LateralLimitedMovementAlgorithm:
         wheel_base_meters=0.6,
         turn_gain_at_stop=1.0,
         turn_gain_at_max_speed=0.3,
+        turn_throttle_derate_at_full_turn=0.2,
         pivot_turn_speed_mph=2.0,
         turn_deadband=0.02,
         allow_reverse=False,
@@ -38,3 +39,34 @@ def test_outputs_stay_within_speed_bounds():
     left, right, _, _ = algo.compute(1.0, 1.0, 5.0, 5.0, 100.0, 100.0)
     assert 0.0 <= left <= 5.0
     assert 0.0 <= right <= 5.0
+
+
+def test_straight_full_throttle_is_not_derated():
+    algo = _make_algorithm()
+    left, right, _, _ = algo.compute(1.0, 0.0, 5.0, 5.0, 100.0, 100.0)
+    assert left == 5.0
+    assert right == 5.0
+
+
+def test_full_throttle_turn_reserves_speed_headroom():
+    algo = _make_algorithm()
+    straight_left, straight_right, _, _ = algo.compute(
+        1.0,
+        0.0,
+        5.0,
+        5.0,
+        100.0,
+        100.0,
+    )
+    turning_left, turning_right, _, _ = algo.compute(
+        1.0,
+        1.0,
+        5.0,
+        5.0,
+        100.0,
+        100.0,
+    )
+
+    straight_avg = 0.5 * (straight_left + straight_right)
+    turning_avg = 0.5 * (turning_left + turning_right)
+    assert turning_avg < straight_avg

@@ -30,6 +30,7 @@ MAX_TURN_RATE = 100 # maximum turn rate limit in degrees per second
 WHEEL_BASE_METERS = 0.6 # distance between wheels, update to match your chair
 TURN_GAIN_AT_STOP = 1.0
 TURN_GAIN_AT_MAX_SPEED = 1.0
+TURN_THROTTLE_DERATE_AT_FULL_TURN = 0.2
 PIVOT_TURN_SPEED_MPH = 1.6
 TURN_INPUT_DEADBAND = 0.02
 ALLOW_REVERSE = False
