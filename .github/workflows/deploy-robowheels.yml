@@ -33,7 +33,7 @@ jobs:
     # Use Git for Windows Bash explicitly (includes rsync in usr/bin on full installs).
     defaults:
       run:
-        shell: 'C:\Program Files\Git\bin\bash.EXE' --noprofile --norc -eo pipefail {0}'
+        shell: 'C:\Program Files\Git\bin\bash.EXE --noprofile --norc -eo pipefail {0}'
     steps:
       - uses: actions/checkout@v4
         with:
