@@ -32,7 +32,7 @@ jobs:
 
     defaults:
       run:
-        shell: 'C:\Program Files\Git\bin\bash.EXE --noprofile --norc -eo pipefail {0}'
+        shell: '"C:\Program Files\Git\bin\bash.EXE" --noprofile --norc -eo pipefail {0}'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,15 +54,6 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "${HOME}/.ssh/robowheels_deploy"
           chmod 600 "${HOME}/.ssh/robowheels_deploy"
           ssh-keyscan -H "$SSH_HOST" >> "${HOME}/.ssh/known_hosts" 2>/dev/null || true
-          if command -v cygpath >/dev/null 2>&1; then
-            KEY_FILE=$(cygpath -u "${HOME}/.ssh/robowheels_deploy")
-            KNOWN_HOSTS=$(cygpath -u "${HOME}/.ssh/known_hosts")
-          else
-            KEY_FILE=$(echo "${HOME}/.ssh/robowheels_deploy" | sed 's|\\|/|g')
-            KNOWN_HOSTS=$(echo "${HOME}/.ssh/known_hosts" | sed 's|\\|/|g')
-          fi
-          echo "SSH_AUTH_KEY=${KEY_FILE}" >> "$GITHUB_ENV"
-          echo "SSH_KNOWN_HOSTS=${KNOWN_HOSTS}" >> "$GITHUB_ENV"
           command -v ssh
           command -v rsync
 
@@ -73,6 +64,12 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
+          if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
+            export HOME="${USERPROFILE}"
+          fi
+          export HOME="${HOME:-${RUNNER_TEMP}}"
+          SSH_AUTH_KEY="${HOME}/.ssh/robowheels_deploy"
+          SSH_KNOWN_HOSTS="${HOME}/.ssh/known_hosts"
           DEST="${SSH_USER}@${SSH_HOST}:~/robowheels/"
           export RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS}"
           rsync -avz --delete \
@@ -89,6 +86,12 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
+          if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
+            export HOME="${USERPROFILE}"
+          fi
+          export HOME="${HOME:-${RUNNER_TEMP}}"
+          SSH_AUTH_KEY="${HOME}/.ssh/robowheels_deploy"
+          SSH_KNOWN_HOSTS="${HOME}/.ssh/known_hosts"
           ssh -i "${SSH_AUTH_KEY}" \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="${SSH_KNOWN_HOSTS}" \
