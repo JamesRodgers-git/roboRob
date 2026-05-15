@@ -29,8 +29,7 @@ jobs:
   deploy-robowheels:
     needs: test-robowheels
     runs-on: [self-hosted, MEATBALL]
-    # Do NOT use shell: bash on Windows — it often invokes WSL (fails if no distro installed).
-    # Use Git for Windows Bash explicitly (includes rsync in usr/bin on full installs).
+
     defaults:
       run:
         shell: 'C:\Program Files\Git\bin\bash.EXE --noprofile --norc -eo pipefail {0}'
@@ -38,19 +37,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-
-      - name: Verify Git Bash (not WSL)
-        shell: pwsh
-        run: |
-          $bash = 'C:\Program Files\Git\bin\bash.exe'
-          if (-not (Test-Path $bash)) {
-            throw @"
-          Git for Windows is required on the MEATBALL runner.
-          Install from https://git-scm.com/download/win and select 'Git Bash' + Unix tools.
-          Alternatively, install WSL Ubuntu and register the runner inside WSL instead of Windows.
-          "@
-          }
-          Write-Host "OK: Git Bash at $bash"
 
       - name: Configure SSH key
         env:
