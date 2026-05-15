@@ -96,4 +96,4 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="${SSH_KNOWN_HOSTS}" \
             "${SSH_USER}@${SSH_HOST}" \
-            "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels bash \$HOME/robowheels/deploy/bootstrap-remote.sh"
+            "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels REBOOT_IF_BOOT_CHANGED=true bash \$HOME/robowheels/deploy/bootstrap-remote.sh"

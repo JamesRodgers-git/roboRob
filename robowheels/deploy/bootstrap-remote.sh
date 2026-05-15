@@ -78,8 +78,29 @@ ensure_boot_line() {
   BOOT_CHANGED=1
 }
 
+ensure_boot_kv() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  if grep -qE "^${key}=${value}$" "$file" 2>/dev/null; then
+    return 0
+  fi
+  if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    log "Setting ${key}=${value} in $file"
+    sudo sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+  else
+    log "Adding '${key}=${value}' to $file"
+    echo "${key}=${value}" | sudo tee -a "$file" >/dev/null
+  fi
+  BOOT_CHANGED=1
+}
+
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
   ensure_boot_line "$cfg" "dtoverlay=dwc2"
+  ensure_boot_kv "$cfg" "enable_uart" "1"
 done
 
 for cmdline in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
