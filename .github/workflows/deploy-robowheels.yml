@@ -1,0 +1,60 @@
+name: Deploy RoboWheels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "robowheels/**"
+      - ".github/workflows/deploy-robowheels.yml"
+  workflow_dispatch:
+
+jobs:
+  test-robowheels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies and run tests
+        working-directory: robowheels
+        run: |
+          pip install -r requirements.txt
+          pytest tests -q
+
+  deploy-robowheels:
+    needs: test-robowheels
+    runs-on: [self-hosted, MEATBALL]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.ROBOWHEELS_SSH_PRIVATE_KEY }}
+
+      - name: Add Pi host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.ROBOWHEELS_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Rsync robowheels to Pi
+        env:
+          SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
+          SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
+        run: |
+          DEST="${SSH_USER}@${SSH_HOST}:~/robowheels/"
+          rsync -az --delete \
+            --exclude '.venv' \
+            --exclude '__pycache__' \
+            --exclude '.pytest_cache' \
+            --exclude '.vscode' \
+            ./robowheels/ "$DEST"
+
+      - name: Remote bootstrap (apt, venv, systemd)
+        env:
+          SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
+          SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
+        run: |
+          ssh "${SSH_USER}@${SSH_HOST}" \
+            "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels bash \$HOME/robowheels/deploy/bootstrap-remote.sh"
