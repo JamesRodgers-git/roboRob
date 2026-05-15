@@ -1,6 +1,14 @@
 # RoboWheels deploy (GitHub Actions + MEATBALL runner)
 
+Repository: [roboRob](https://github.com/JamesRodgers-git/roboRob) (monorepo; only `robowheels/` is deployed by this workflow).
+
 Deploys only the `robowheels/` tree to the Pi Zero 2 W motion controller. **robobrain** is deployed separately on another Pi later.
+
+## After renaming the GitHub repository
+
+- **Workflows and secrets** stay on the same repo; no workflow edits are required (`actions/checkout` uses the current repository automatically).
+- **Local clones:** `git remote set-url origin https://github.com/JamesRodgers-git/roboRob.git`
+- **Self-hosted runner (MEATBALL):** Usually keeps working after a GitHub rename. If jobs stop picking up, remove and re-register the runner from **Settings → Actions → Runners** on the renamed repo, or re-run the runner install script so its config points at `JamesRodgers-git/roboRob`.
 
 ## Architecture
 
