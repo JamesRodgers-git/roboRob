@@ -43,16 +43,19 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.ROBOWHEELS_SSH_PRIVATE_KEY }}
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
         run: |
-          source ./robowheels/deploy/ci-runner-env.sh
+          set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
+          if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
+            export HOME="${USERPROFILE}"
+          fi
+          export HOME="${HOME:-${RUNNER_TEMP}}"
           mkdir -p "${HOME}/.ssh"
           chmod 700 "${HOME}/.ssh"
           printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "${HOME}/.ssh/robowheels_deploy"
           chmod 600 "${HOME}/.ssh/robowheels_deploy"
           ssh-keyscan -H "$SSH_HOST" >> "${HOME}/.ssh/known_hosts" 2>/dev/null || true
-          KEY_FILE=$(to_unix_path "${HOME}/.ssh/robowheels_deploy")
-          KNOWN_HOSTS=$(to_unix_path "${HOME}/.ssh/known_hosts")
-          echo "SSH_AUTH_KEY=${KEY_FILE}" >> "$GITHUB_ENV"
-          echo "SSH_KNOWN_HOSTS=${KNOWN_HOSTS}" >> "$GITHUB_ENV"
+          echo "HOME=${HOME}" >> "$GITHUB_ENV"
+          echo "SSH_AUTH_KEY=${HOME}/.ssh/robowheels_deploy" >> "$GITHUB_ENV"
           command -v ssh rsync
 
       - name: Rsync robowheels to Pi
@@ -60,9 +63,10 @@ jobs:
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
-          source ./robowheels/deploy/ci-runner-env.sh
+          set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
           DEST="${SSH_USER}@${SSH_HOST}:~/robowheels/"
-          RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS}"
+          RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
           export RSYNC_RSH
           rsync -az --delete \
             --exclude '.venv' \
@@ -76,9 +80,10 @@ jobs:
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
-          source ./robowheels/deploy/ci-runner-env.sh
+          set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
           ssh -i "${SSH_AUTH_KEY}" \
             -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="${SSH_KNOWN_HOSTS}" \
+            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
             "${SSH_USER}@${SSH_HOST}" \
             "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels bash \$HOME/robowheels/deploy/bootstrap-remote.sh"
