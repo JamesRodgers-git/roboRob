@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Idempotent provision + venv + systemd for RoboWheels on Pi Zero 2 W.
 # Run on the Pi after rsync (e.g. bash ~/robowheels/deploy/bootstrap-remote.sh).
 set -euo pipefail
