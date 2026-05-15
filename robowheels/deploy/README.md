@@ -23,6 +23,7 @@ Deploys only the `robowheels/` tree to the Pi Zero 2 W motion controller. **robo
 2. When configuring labels, include **`MEATBALL`** (in addition to `self-hosted`).
 3. Install the runner as a **service** so it runs when you are not logged in.
 4. Ensure `ssh` and `rsync` work from that same environment to the Pi.
+5. **Windows runners:** The workflow uses **Git Bash** and a deploy key file under `%USERPROFILE%\.ssh` (not `webfactory/ssh-agent`, which fails with `mkdir //.ssh: Read-only file system`). Register the runner so jobs use Git Bash, or run the runner inside **WSL2** instead.
 
 ## One-time: Pi after wipe
 

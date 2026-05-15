@@ -29,27 +29,42 @@ jobs:
   deploy-robowheels:
     needs: test-robowheels
     runs-on: [self-hosted, MEATBALL]
+  # Git Bash on Windows: webfactory/ssh-agent fails (//.ssh read-only). Use a key file instead.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
 
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.ROBOWHEELS_SSH_PRIVATE_KEY }}
-
-      - name: Add Pi host key
+      - name: Configure SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.ROBOWHEELS_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "${{ secrets.ROBOWHEELS_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          set -euo pipefail
+          if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
+            export HOME="${USERPROFILE}"
+          fi
+          export HOME="${HOME:-${RUNNER_TEMP}}"
+          mkdir -p "${HOME}/.ssh"
+          chmod 700 "${HOME}/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "${HOME}/.ssh/robowheels_deploy"
+          chmod 600 "${HOME}/.ssh/robowheels_deploy"
+          ssh-keyscan -H "$SSH_HOST" >> "${HOME}/.ssh/known_hosts" 2>/dev/null || true
+          echo "HOME=${HOME}" >> "$GITHUB_ENV"
+          echo "SSH_AUTH_KEY=${HOME}/.ssh/robowheels_deploy" >> "$GITHUB_ENV"
 
       - name: Rsync robowheels to Pi
         env:
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
+          set -euo pipefail
           DEST="${SSH_USER}@${SSH_HOST}:~/robowheels/"
+          RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
+          export RSYNC_RSH
           rsync -az --delete \
             --exclude '.venv' \
             --exclude '__pycache__' \
@@ -62,5 +77,9 @@ jobs:
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
-          ssh "${SSH_USER}@${SSH_HOST}" \
+          set -euo pipefail
+          ssh -i "${SSH_AUTH_KEY}" \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
+            "${SSH_USER}@${SSH_HOST}" \
             "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels bash \$HOME/robowheels/deploy/bootstrap-remote.sh"
