@@ -28,10 +28,3 @@ Robotics stack for a dual-Pi setup:
 | [robowheels/](robowheels/) | Raspberry Pi Zero 2 W | Motion: CRSF radio, motors, brakes, USB gadget AI serial |
 | [robobrain/](robobrain/) | Raspberry Pi 5 + AI HAT+ | Perception and AI movement commands to robowheels |
 
-## Clone
-
-```bash
-git clone https://github.com/JamesRodgers-git/roboRob.git
-cd roboRob
-```
-
