@@ -25,7 +25,7 @@ Deploys only the `robowheels/` tree to the Pi Zero 2 W motion controller. **robo
 4. Ensure `ssh` and `rsync` work from that same environment to the Pi.
 5. **Windows runners (MEATBALL):**
    - Install **[Git for Windows](https://git-scm.com/download/win)** (includes Git Bash; enable optional **Unix tools** / rsync in setup).
-   - The workflow uses the quoted `C:\Program Files\Git\bin\bash.exe` path explicitly — **not** WSL. If you see `WSL has no installed distributions`, your runner was using WSL bash; reinstall Git for Windows or register the runner inside WSL Ubuntu instead.
+   - The workflow uses the no-space short path `C:\PROGRA~1\Git\bin\bash.exe` explicitly — **not** WSL. If you see `WSL has no installed distributions`, your runner was using WSL bash; reinstall Git for Windows or register the runner inside WSL Ubuntu instead.
    - Deploy key file: `%USERPROFILE%\.ssh\robowheels_deploy` (not `webfactory/ssh-agent`).
    - The workflow does not write local filesystem paths to `GITHUB_ENV`; each Git Bash step re-derives `~/.ssh` paths from the runner environment to avoid Windows drive-letter parsing errors.
 
