@@ -71,7 +71,7 @@ ssh heiwashin@robowheels.local 'bash ~/robowheels/deploy/bootstrap-remote.sh'
 
 ## Boot config changes
 
-Bootstrap enforces `enable_uart=1` for CRSF on `/dev/serial0` and adds USB gadget lines to `/boot/firmware/config.txt` or `cmdline.txt`. The deploy workflow passes `REBOOT_IF_BOOT_CHANGED=true`, so the Pi auto-reboots when those boot settings change. After that reboot, rerun deploy or restart the service if needed before expecting `/dev/serial0` or `/dev/ttyGS*`.
+Bootstrap directly enforces `enable_uart=1` for CRSF on `/dev/serial0`, `dtparam=i2c_arm=on` for motor I2C, and USB gadget lines in `/boot/firmware/config.txt` or `cmdline.txt`. The deploy workflow passes `REBOOT_IF_BOOT_CHANGED=true`, so the Pi auto-reboots when those boot settings change. After that reboot, rerun deploy or restart the service if needed before expecting `/dev/serial0`, `/dev/i2c-1`, or `/dev/ttyGS*`.
 
 ## Service
 

@@ -30,7 +30,6 @@ sudo apt-get install -y -qq \
   python3-venv \
   python3-pip \
   python3-dev \
-  raspi-config \
   i2c-tools \
   libgpiod2 \
   python3-libgpiod \
@@ -41,19 +40,6 @@ sudo apt-get install -y -qq \
 # python3-libgpiod may be named differently on older images
 if ! dpkg -s python3-libgpiod &>/dev/null 2>&1; then
   sudo apt-get install -y -qq python3-libgpiod2 2>/dev/null || true
-fi
-
-# --- raspi-config (noninteractive) ---
-if command -v raspi-config &>/dev/null; then
-  log "Enabling I2C and serial via raspi-config..."
-  sudo raspi-config nonint do_i2c 0 || warn "do_i2c failed"
-  sudo raspi-config nonint do_serial 0 || warn "do_serial failed"
-  # Disable serial login console so CRSF can use UART (when supported)
-  if raspi-config nonint 2>&1 | grep -q do_serial_cons; then
-    sudo raspi-config nonint do_serial_cons 1 || warn "do_serial_cons failed"
-  fi
-else
-  warn "raspi-config not found; enable I2C/UART manually"
 fi
 
 # --- Groups ---
@@ -101,6 +87,7 @@ ensure_boot_kv() {
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
   ensure_boot_line "$cfg" "dtoverlay=dwc2"
   ensure_boot_kv "$cfg" "enable_uart" "1"
+  ensure_boot_kv "$cfg" "dtparam=i2c_arm" "on"
 done
 
 for cmdline in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
