@@ -6,5 +6,5 @@ pytest>=7.0
 
 smbus2>=0.4.1
 
-# Brake PWM (Pi Zero 2 W / Pi 5)
+# Brake PWM (Pi Zero 2 W)
 gpiozero>=1.6.0

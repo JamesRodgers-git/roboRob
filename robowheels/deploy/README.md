@@ -23,6 +23,11 @@ Deploys only the `robowheels/` tree to the Pi Zero 2 W motion controller. **robo
 2. When configuring labels, include **`MEATBALL`** (in addition to `self-hosted`).
 3. Install the runner as a **service** so it runs when you are not logged in.
 4. Ensure `ssh` and `rsync` work from that same environment to the Pi.
+5. **Windows runners (MEATBALL):**
+   - Install **[Git for Windows](https://git-scm.com/download/win)** (includes Git Bash; enable optional **Unix tools** / rsync in setup).
+   - The workflow uses the no-space short path `C:\PROGRA~1\Git\bin\bash.exe` explicitly — **not** WSL. If you see `WSL has no installed distributions`, your runner was using WSL bash; reinstall Git for Windows or register the runner inside WSL Ubuntu instead.
+   - Deploy key file: `%USERPROFILE%\.ssh\robowheels_deploy` (not `webfactory/ssh-agent`).
+   - The workflow does not write local filesystem paths to `GITHUB_ENV`; each Git Bash step re-derives `~/.ssh` paths from the runner environment to avoid Windows drive-letter parsing errors.
 
 ## One-time: Pi after wipe
 
@@ -66,7 +71,7 @@ ssh heiwashin@robowheels.local 'bash ~/robowheels/deploy/bootstrap-remote.sh'
 
 ## Boot config changes
 
-If bootstrap adds USB gadget lines to `/boot/firmware/config.txt` or `cmdline.txt`, **reboot the Pi once** before expecting `/dev/ttyGS*`. Set `REBOOT_IF_BOOT_CHANGED=true` on the SSH step to auto-reboot (optional).
+Bootstrap directly enforces `enable_uart=1` for CRSF on `/dev/serial0`, `dtparam=i2c_arm=on` for motor I2C, and USB gadget lines in `/boot/firmware/config.txt` or `cmdline.txt`. The deploy workflow passes `REBOOT_IF_BOOT_CHANGED=true`, so the Pi auto-reboots when those boot settings change. After that reboot, rerun deploy or restart the service if needed before expecting `/dev/serial0`, `/dev/i2c-1`, or `/dev/ttyGS*`.
 
 ## Service
 

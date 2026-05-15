@@ -2,7 +2,7 @@ name: Deploy RoboWheels
 
 on:
   push:
-    branches: [main]
+    branches: [main, deployment]
     paths:
       - "robowheels/**"
       - ".github/workflows/deploy-robowheels.yml"
@@ -13,11 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install dependencies and run tests
         working-directory: robowheels
+        env:
+          PYTHONPATH: .
         run: |
           pip install -r requirements.txt
           pytest tests -q
@@ -25,26 +29,50 @@ jobs:
   deploy-robowheels:
     needs: test-robowheels
     runs-on: [self-hosted, MEATBALL]
+
+    defaults:
+      run:
+        shell: 'C:\PROGRA~1\Git\bin\bash.EXE --noprofile --norc -eo pipefail {0}'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Start SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.ROBOWHEELS_SSH_PRIVATE_KEY }}
+          submodules: false
 
-      - name: Add Pi host key
+      - name: Configure SSH key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.ROBOWHEELS_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
         run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H "${{ secrets.ROBOWHEELS_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
+          if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
+            export HOME="${USERPROFILE}"
+          fi
+          export HOME="${HOME:-${RUNNER_TEMP}}"
+          mkdir -p "${HOME}/.ssh"
+          chmod 700 "${HOME}/.ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > "${HOME}/.ssh/robowheels_deploy"
+          chmod 600 "${HOME}/.ssh/robowheels_deploy"
+          ssh-keyscan -H "$SSH_HOST" >> "${HOME}/.ssh/known_hosts" 2>/dev/null || true
+          command -v ssh
+          command -v rsync
 
       - name: Rsync robowheels to Pi
         env:
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
+          set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
+          if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
+            export HOME="${USERPROFILE}"
+          fi
+          export HOME="${HOME:-${RUNNER_TEMP}}"
+          SSH_AUTH_KEY="${HOME}/.ssh/robowheels_deploy"
+          SSH_KNOWN_HOSTS="${HOME}/.ssh/known_hosts"
           DEST="${SSH_USER}@${SSH_HOST}:~/robowheels/"
-          rsync -az --delete \
+          export RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${SSH_KNOWN_HOSTS}"
+          rsync -avz --delete \
             --exclude '.venv' \
             --exclude '__pycache__' \
             --exclude '.pytest_cache' \
@@ -56,5 +84,16 @@ jobs:
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
-          ssh "${SSH_USER}@${SSH_HOST}" \
-            "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels bash \$HOME/robowheels/deploy/bootstrap-remote.sh"
+          set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
+          if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
+            export HOME="${USERPROFILE}"
+          fi
+          export HOME="${HOME:-${RUNNER_TEMP}}"
+          SSH_AUTH_KEY="${HOME}/.ssh/robowheels_deploy"
+          SSH_KNOWN_HOSTS="${HOME}/.ssh/known_hosts"
+          ssh -i "${SSH_AUTH_KEY}" \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="${SSH_KNOWN_HOSTS}" \
+            "${SSH_USER}@${SSH_HOST}" \
+            "DEPLOY_USER=${SSH_USER} INSTALL_DIR=\$HOME/robowheels REBOOT_IF_BOOT_CHANGED=true bash \$HOME/robowheels/deploy/bootstrap-remote.sh"

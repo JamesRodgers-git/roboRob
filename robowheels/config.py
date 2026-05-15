@@ -25,11 +25,11 @@ MOTOR_CONTROLLER_RESET_SPEED = 0
 
 MAX_SPEED = 5 # estimated top speed in miles per hour
 MAX_ACCELERATION = 4 # maximum acceleration limit in miles per hour per second
-MAX_LATERAL_ACCELERATION = 2 # maximum lateral acceleration limit in miles per hour per second
+MAX_LATERAL_ACCELERATION = 4 # maximum lateral acceleration limit in miles per hour per second
 MAX_TURN_RATE = 100 # maximum turn rate limit in degrees per second
 WHEEL_BASE_METERS = 0.6 # distance between wheels, update to match your chair
 TURN_GAIN_AT_STOP = 1.0
-TURN_GAIN_AT_MAX_SPEED = 0.3
+TURN_GAIN_AT_MAX_SPEED = 1.0
 PIVOT_TURN_SPEED_MPH = 1.6
 TURN_INPUT_DEADBAND = 0.02
 ALLOW_REVERSE = False

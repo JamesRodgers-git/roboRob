@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Idempotent provision + venv + systemd for RoboWheels on Pi Zero 2 W.
 # Run on the Pi after rsync (e.g. bash ~/robowheels/deploy/bootstrap-remote.sh).
 set -euo pipefail
@@ -30,29 +30,16 @@ sudo apt-get install -y -qq \
   python3-venv \
   python3-pip \
   python3-dev \
-  raspi-config \
   i2c-tools \
   libgpiod2 \
   python3-libgpiod \
+  python3-rpi.gpio \
   rsync \
   || true
 
 # python3-libgpiod may be named differently on older images
 if ! dpkg -s python3-libgpiod &>/dev/null 2>&1; then
   sudo apt-get install -y -qq python3-libgpiod2 2>/dev/null || true
-fi
-
-# --- raspi-config (noninteractive) ---
-if command -v raspi-config &>/dev/null; then
-  log "Enabling I2C and serial via raspi-config..."
-  sudo raspi-config nonint do_i2c 0 || warn "do_i2c failed"
-  sudo raspi-config nonint do_serial 0 || warn "do_serial failed"
-  # Disable serial login console so CRSF can use UART (when supported)
-  if raspi-config nonint 2>&1 | grep -q do_serial_cons; then
-    sudo raspi-config nonint do_serial_cons 1 || warn "do_serial_cons failed"
-  fi
-else
-  warn "raspi-config not found; enable I2C/UART manually"
 fi
 
 # --- Groups ---
@@ -77,8 +64,30 @@ ensure_boot_line() {
   BOOT_CHANGED=1
 }
 
+ensure_boot_kv() {
+  local file="$1"
+  local key="$2"
+  local value="$3"
+  if [[ ! -f "$file" ]]; then
+    return 0
+  fi
+  if grep -qE "^${key}=${value}$" "$file" 2>/dev/null; then
+    return 0
+  fi
+  if grep -qE "^${key}=" "$file" 2>/dev/null; then
+    log "Setting ${key}=${value} in $file"
+    sudo sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+  else
+    log "Adding '${key}=${value}' to $file"
+    echo "${key}=${value}" | sudo tee -a "$file" >/dev/null
+  fi
+  BOOT_CHANGED=1
+}
+
 for cfg in /boot/firmware/config.txt /boot/config.txt; do
   ensure_boot_line "$cfg" "dtoverlay=dwc2"
+  ensure_boot_kv "$cfg" "enable_uart" "1"
+  ensure_boot_kv "$cfg" "dtparam=i2c_arm" "on"
 done
 
 for cmdline in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
@@ -106,7 +115,9 @@ fi
 log "Creating/updating venv in $INSTALL_DIR/.venv"
 cd "$INSTALL_DIR"
 if [[ ! -d .venv ]]; then
-  python3 -m venv .venv
+  python3 -m venv --system-site-packages .venv
+elif [[ -f .venv/pyvenv.cfg ]] && ! grep -q "include-system-site-packages = true" .venv/pyvenv.cfg; then
+  sed -i "s/include-system-site-packages = false/include-system-site-packages = true/" .venv/pyvenv.cfg
 fi
 .venv/bin/pip install -U pip wheel
 .venv/bin/pip install -r requirements.txt
