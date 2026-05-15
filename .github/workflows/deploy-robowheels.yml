@@ -29,14 +29,28 @@ jobs:
   deploy-robowheels:
     needs: test-robowheels
     runs-on: [self-hosted, MEATBALL]
-  # Git Bash on Windows: webfactory/ssh-agent fails (//.ssh read-only). Use a key file instead.
+    # Do NOT use shell: bash on Windows — it often invokes WSL (fails if no distro installed).
+    # Use Git for Windows Bash explicitly (includes rsync in usr/bin on full installs).
     defaults:
       run:
-        shell: bash
+        shell: 'C:\Program Files\Git\bin\bash.EXE' --noprofile --norc -eo pipefail {0}'
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: false
+
+      - name: Verify Git Bash (not WSL)
+        shell: pwsh
+        run: |
+          $bash = 'C:\Program Files\Git\bin\bash.exe'
+          if (-not (Test-Path $bash)) {
+            throw @"
+          Git for Windows is required on the MEATBALL runner.
+          Install from https://git-scm.com/download/win and select 'Git Bash' + Unix tools.
+          Alternatively, install WSL Ubuntu and register the runner inside WSL instead of Windows.
+          "@
+          }
+          Write-Host "OK: Git Bash at $bash"
 
       - name: Configure SSH key
         env:
@@ -44,6 +58,7 @@ jobs:
           SSH_HOST: ${{ secrets.ROBOWHEELS_SSH_HOST }}
         run: |
           set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
           if [ -n "${USERPROFILE:-}" ] && [ -z "${HOME:-}" ]; then
             export HOME="${USERPROFILE}"
           fi
@@ -55,6 +70,7 @@ jobs:
           ssh-keyscan -H "$SSH_HOST" >> "${HOME}/.ssh/known_hosts" 2>/dev/null || true
           echo "HOME=${HOME}" >> "$GITHUB_ENV"
           echo "SSH_AUTH_KEY=${HOME}/.ssh/robowheels_deploy" >> "$GITHUB_ENV"
+          command -v ssh rsync
 
       - name: Rsync robowheels to Pi
         env:
@@ -62,6 +78,7 @@ jobs:
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
           set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
           DEST="${SSH_USER}@${SSH_HOST}:~/robowheels/"
           RSYNC_RSH="ssh -i ${SSH_AUTH_KEY} -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${HOME}/.ssh/known_hosts"
           export RSYNC_RSH
@@ -78,6 +95,7 @@ jobs:
           SSH_USER: ${{ secrets.ROBOWHEELS_SSH_USER }}
         run: |
           set -euo pipefail
+          export PATH="/c/Program Files/Git/usr/bin:/c/Program Files/Git/bin:/usr/bin:$PATH"
           ssh -i "${SSH_AUTH_KEY}" \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" \
