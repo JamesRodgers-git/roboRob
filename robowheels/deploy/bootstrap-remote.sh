@@ -34,6 +34,7 @@ sudo apt-get install -y -qq \
   i2c-tools \
   libgpiod2 \
   python3-libgpiod \
+  python3-rpi.gpio \
   rsync \
   || true
 
@@ -106,7 +107,9 @@ fi
 log "Creating/updating venv in $INSTALL_DIR/.venv"
 cd "$INSTALL_DIR"
 if [[ ! -d .venv ]]; then
-  python3 -m venv .venv
+  python3 -m venv --system-site-packages .venv
+elif [[ -f .venv/pyvenv.cfg ]] && ! grep -q "include-system-site-packages = true" .venv/pyvenv.cfg; then
+  sed -i "s/include-system-site-packages = false/include-system-site-packages = true/" .venv/pyvenv.cfg
 fi
 .venv/bin/pip install -U pip wheel
 .venv/bin/pip install -r requirements.txt

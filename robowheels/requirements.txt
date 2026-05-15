@@ -8,4 +8,3 @@ smbus2>=0.4.1
 
 # Brake PWM (Pi Zero 2 W)
 gpiozero>=1.6.0
-RPi.GPIO>=0.7.1
